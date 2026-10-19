@@ -268,13 +268,9 @@ export const actions = {
     if (!Array.isArray(approvalIds) || approvalIds.length > 5) throw bad('Send at most 5 approvals per batch')
     if (run.status === 'Draft') await store.update(run.id, { status: 'Running', runAt: nowIso(), runBy: store.user.id }, { system: true })
     const cfg = await billingConfig(store.db)
-    const out = []
-    for (const id of approvalIds) {
-      const a = await store.must(id, 'approval')
-      if (!a.enrolledForBilling || !a.nextBillingDate || a.nextBillingDate < run.startDate || a.nextBillingDate > run.endDate) continue
-      out.push(await billApproval(store, run, a, cfg))
-    }
-    return { calculations: out }
+    const approvals = await store.getMany(approvalIds)
+    const due = approvals.filter((a) => a.object === 'approval' && a.enrolledForBilling && a.nextBillingDate && a.nextBillingDate >= run.startDate && a.nextBillingDate <= run.endDate)
+    return { calculations: await Promise.all(due.map((a) => billApproval(store, run, a, cfg))) }
   },
 
   async billingRunFinish(store, { runId }) {
@@ -309,10 +305,11 @@ async function eligibleApprovals(store, startDate, endDate) {
 async function billApproval(store, run, a, cfg) {
   const periodEnd = addDays(a.nextBillingDate, -1)
   const periodStart = addMonths(a.nextBillingDate, -3)
-  const [meters, readings, samples, results, account] = await Promise.all([
+  const [meters, readings, samples, results, account, locations, params] = await Promise.all([
     store.list('meter', { approvalId: a.id }), store.list('meterReading', { approvalId: a.id }),
     store.list('sample', { approvalId: a.id }), store.list('sampleResult', { approvalId: a.id }),
-    a.billingAccountId ? store.get(a.billingAccountId) : null
+    a.billingAccountId ? store.get(a.billingAccountId) : null,
+    store.list('sampleLocation', { approvalId: a.id }), store.list('testParameter', { billable: true })
   ])
   const billingMeters = meters.filter((m) => m.usedForBilling && !m.alternateSupplyId)
   const discharge = billingMeters.filter((m) => m.kind === 'Discharge')
@@ -323,7 +320,7 @@ async function billApproval(store, run, a, cfg) {
   const domesticOffsetKl = round(((a.employees || 0) * cfg.domesticLitresPerEmployeeDay + (a.showeringEmployees || 0) * cfg.domesticLitresPerShowerDay) * (a.workingDays || 5) * weeks / 1000)
   const tradeWasteKl = Math.max(0, round(inflowKl * dischargeFactor - domesticOffsetKl))
 
-  const billingLocations = new Set((await store.list('sampleLocation', { approvalId: a.id })).filter((l) => l.usedForBilling).map((l) => l.id))
+  const billingLocations = new Set(locations.filter((l) => l.usedForBilling).map((l) => l.id))
   const events = await store.getMany([...new Set(samples.map((x) => x.samplingEventId))])
   const eventById = Object.fromEntries(events.map((e) => [e.id, e]))
   const usable = new Set(samples.filter((x) => {
@@ -331,7 +328,6 @@ async function billApproval(store, run, a, cfg) {
     return !x.excludeFromBilling && x.status === 'Received' && billingLocations.has(x.sampleLocationId) && ev?.sampleDate >= periodStart && ev?.sampleDate <= periodEnd &&
       (x.method !== 'Composite' || ev.massLoadCalculated)
   }).map((x) => x.id))
-  const params = await store.list('testParameter', { billable: true })
   const codeOf = Object.fromEntries(params.map((p) => [p.id, p.code]))
   const conc = {}
   let deemed = !!a.isDeemedQuality
