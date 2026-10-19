@@ -1,9 +1,9 @@
-name = "twain-prototype"
+name = "twain-uat"
 compatibility_date = "2025-10-01"
 pages_build_output_dir = "dist"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "twain"
-database_id = "ffdac343-bb07-413b-81bf-d738f8634223"
+database_name = "twain-uat"
+database_id = "074f185d-9235-4f00-b6d7-1e3baf47f8c2"
 migrations_dir = "migrations"
