@@ -1,5 +1,5 @@
 import { OBJECTS, BILLING_PARAMS, DEFAULT_BILLING_CONFIG, recommendCapacity } from '../shared/objects.js'
-import { bad, today, nowIso } from './store.js'
+import { bad, today, nowIso, toRecord, uid } from './store.js'
 import * as s from './schema.js'
 import { eq } from 'drizzle-orm'
 
@@ -270,7 +270,8 @@ export const actions = {
     const cfg = await billingConfig(store.db)
     const approvals = await store.getMany(approvalIds)
     const due = approvals.filter((a) => a.object === 'approval' && a.enrolledForBilling && a.nextBillingDate && a.nextBillingDate >= run.startDate && a.nextBillingDate <= run.endDate)
-    return { calculations: await Promise.all(due.map((a) => billApproval(store, run, a, cfg))) }
+    const params = await store.list('testParameter', { billable: true })
+    return { calculations: await Promise.all(due.map((a) => billApproval(store, run, a, cfg, params))) }
   },
 
   async billingRunFinish(store, { runId }) {
@@ -302,15 +303,16 @@ async function eligibleApprovals(store, startDate, endDate) {
     .filter((a) => a.enrolledForBilling && a.nextBillingDate && a.nextBillingDate >= startDate && a.nextBillingDate <= endDate)
 }
 
-async function billApproval(store, run, a, cfg) {
+async function billApproval(store, run, a, cfg, params) {
   const periodEnd = addDays(a.nextBillingDate, -1)
   const periodStart = addMonths(a.nextBillingDate, -3)
-  const [meters, readings, samples, results, account, locations, params] = await Promise.all([
-    store.list('meter', { approvalId: a.id }), store.list('meterReading', { approvalId: a.id }),
-    store.list('sample', { approvalId: a.id }), store.list('sampleResult', { approvalId: a.id }),
-    a.billingAccountId ? store.get(a.billingAccountId) : null,
-    store.list('sampleLocation', { approvalId: a.id }), store.list('testParameter', { billable: true })
+  // One query for everything under the approval keeps a batch of 5 well inside Worker limits.
+  const [rows, account] = await Promise.all([
+    store.db.select().from(s.records).where(eq(s.records.approvalId, a.id)),
+    a.billingAccountId ? store.get(a.billingAccountId) : null
   ])
+  const of = (o) => rows.filter((r) => r.object === o).map(toRecord)
+  const [meters, readings, samples, results, locations, events] = ['meter', 'meterReading', 'sample', 'sampleResult', 'sampleLocation', 'samplingEvent'].map(of)
   const billingMeters = meters.filter((m) => m.usedForBilling && !m.alternateSupplyId)
   const discharge = billingMeters.filter((m) => m.kind === 'Discharge')
   const useMeters = new Set((discharge.length ? discharge : billingMeters).map((m) => m.id))
@@ -321,7 +323,6 @@ async function billApproval(store, run, a, cfg) {
   const tradeWasteKl = Math.max(0, round(inflowKl * dischargeFactor - domesticOffsetKl))
 
   const billingLocations = new Set(locations.filter((l) => l.usedForBilling).map((l) => l.id))
-  const events = await store.getMany([...new Set(samples.map((x) => x.samplingEventId))])
   const eventById = Object.fromEntries(events.map((e) => [e.id, e]))
   const usable = new Set(samples.filter((x) => {
     const ev = eventById[x.samplingEventId]
@@ -347,12 +348,14 @@ async function billApproval(store, run, a, cfg) {
   })
   const amount = round(breakdown.reduce((x, b) => x + b.charge, 0))
   const sampleCount = deemed ? 0 : usable.size
-  const calc = await store.create('billingCalc', {
-    billingRunId: run.id, approvalId: a.id, periodStart, periodEnd, inflowKl, dischargeFactor, domesticOffsetKl, tradeWasteKl, deemed,
+  const calcId = uid(), invId = uid()
+  const calc = await store.prepareCreate('billingCalc', {
+    billingRunId: run.id, approvalId: a.id, invoiceId: invId, periodStart, periodEnd, inflowKl, dischargeFactor, domesticOffsetKl, tradeWasteKl, deemed,
     ...conc, sampleCount, amount, breakdown: { lines: breakdown, note: noSamples && !a.isDeemedQuality ? 'No usable samples in the period; deemed quality applied' : null }
-  }, { system: true })
-  const inv = await store.create('invoice', { approvalId: a.id, billingRunId: run.id, billingCalcId: calc.id, invoiceType: 'Trade Waste Quality', status: 'Draft', periodStart, periodEnd, amount }, { system: true })
-  await store.update(calc.id, { invoiceId: inv.id }, { system: true, raw: true })
-  await store.update(a.id, { lastBillingDate: periodEnd, nextBillingDate: addMonths(a.nextBillingDate, 3) }, { system: true })
-  return { id: calc.id, approval: a.name, amount, deemed }
+  }, calcId)
+  const gst = round(amount * DEFAULT_BILLING_CONFIG.gstRate)
+  const inv = await store.prepareCreate('invoice', { approvalId: a.id, billingRunId: run.id, billingCalcId: calcId, invoiceType: 'Trade Waste Quality', status: 'Draft', periodStart, periodEnd, amount, gst, total: round(amount + gst) }, invId)
+  // All writes for one approval commit together, so a retried batch never bills an approval twice.
+  await store.db.batch([...calc, ...inv, ...store.prepareSystemPatch(a, { lastBillingDate: periodEnd, nextBillingDate: addMonths(a.nextBillingDate, 3) })])
+  return { id: calcId, approval: a.name, amount, deemed }
 }
