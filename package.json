@@ -1,0 +1,33 @@
+{
+  "name": "twain-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "dev:api": "node server/node.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply twain --local",
+    "db:migrate:remote": "wrangler d1 migrations apply twain --remote",
+    "dev:cf": "npm run build && wrangler pages dev --port 8789"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "drizzle-orm": "^0.45.4",
+    "element-plus": "^2.14.7",
+    "hono": "^4.13.13",
+    "papaparse": "^5.7.0",
+    "vue": "^3.5.44",
+    "vue-router": "^5.4.0"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^2.1.5",
+    "@libsql/client": "^0.18.0",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "drizzle-kit": "^0.31.11",
+    "vite": "^8.3.4",
+    "wrangler": "^4.151.1"
+  }
+}
