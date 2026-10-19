@@ -144,15 +144,19 @@ function tabCount(t) {
 }
 
 async function reload() {
+  const current = id.value
+  // Leaving the page changes the route before this component unmounts.
+  if (!current) return
   try {
-    const res = await getRecord(id.value)
+    const res = await getRecord(current)
+    if (current !== id.value) return
     if (res.record.object !== object.value) return router.replace(`/r/${res.record.object}/${res.record.id}`)
     record.value = res.record
     names.value = res.names
     counts.value = res.counts
     openTab({ ...res.record, label: recordTitle(res.record) })
   } catch (e) {
-    if (/not found/i.test(e.message)) { closeTab(id.value); router.replace('/home') }
+    if (/not found/i.test(e.message) && current === id.value) { closeTab(current); router.replace('/home') }
   }
 }
 const onSaved = (r) => { record.value = r; changed() }
@@ -260,7 +264,8 @@ async function saveFreq() {
   changed()
 }
 
-watch(id, () => {
+watch(id, (v) => {
+  if (!v) return
   record.value = null
   const q = route.query.tab
   tab.value = q && layout.value.tabs.some((t) => t.key === q) ? q : layout.value.tabs[0].key
