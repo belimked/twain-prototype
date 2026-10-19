@@ -31,7 +31,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { runAction, listRecords, changed } from '../api.js'
+import { api, runAction, listRecords, changed } from '../api.js'
 import { openRecord } from '../nav.js'
 import { toCsv, download } from '../meta.js'
 const props = defineProps({ record: Object })
@@ -58,16 +58,24 @@ async function start() {
   failed.value = 0
   const ids = eligible.value.map((a) => a.id)
   for (let i = 0; i < ids.length; i += 5) {
-    try {
-      await runAction('billingRunBatch', { runId: props.record.id, approvalIds: ids.slice(i, i + 5) })
-    } catch {
-      failed.value++
+    const batch = ids.slice(i, i + 5)
+    let ok = false
+    // Retrying is safe: a billed approval moves its Next Billing Date out of the run range.
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+      try {
+        await api('/actions/billingRunBatch', { method: 'POST', body: { runId: props.record.id, approvalIds: batch }, quiet: true })
+        ok = true
+      } catch {
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)))
+      }
     }
+    if (!ok) failed.value++
     done.value = Math.min(ids.length, i + 5)
   }
-  await runAction('billingRunFinish', { runId: props.record.id })
+  await api('/actions/billingRunFinish', { method: 'POST', body: { runId: props.record.id } })
   running.value = false
-  ElMessage.success('Billing run completed')
+  if (failed.value) ElMessage.warning(`Billing run completed; ${failed.value} batch(es) failed – start a new run for the remaining approvals`)
+  else ElMessage.success('Billing run completed')
   changed()
   emit('changed')
 }

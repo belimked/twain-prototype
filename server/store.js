@@ -201,6 +201,27 @@ export function createStore(db, user, hooks = {}) {
       return rec
     },
 
+    // Statements for one db.batch (number reserved up front). Skips hooks, so callers set derived fields.
+    async prepareCreate(object, data, id = uid()) {
+      const def = defOf(object)
+      const name = def.prefix ? await nextNumber(db, def) : nameFor(def, data)
+      const at = nowIso()
+      const row = { id, object, name, ownerId: null, data, createdAt: at, createdBy: user?.name ?? 'System', updatedAt: at, updatedBy: user?.name ?? 'System', ...columnsFor(def, data) }
+      return [db.insert(s.records).values(row), db.insert(s.history).values({ id: uid(), recordId: id, object, field: '__created', newValue: name, userId: user?.id, userName: user?.name ?? 'System', at })]
+    },
+
+    prepareSystemPatch(rec, patch) {
+      const def = defOf(rec.object)
+      const data = { ...stripSystem(rec), ...patch }
+      delete data.ownerId
+      const at = nowIso()
+      const changes = Object.keys(patch).filter((k) => show(rec[k]) !== show(patch[k]))
+      return [
+        db.update(s.records).set({ data, updatedAt: at, updatedBy: user?.name ?? 'System', ...columnsFor(def, data) }).where(eq(s.records.id, rec.id)),
+        ...(changes.length ? [db.insert(s.history).values(changes.map((k) => ({ id: uid(), recordId: rec.id, object: def.key, field: k, oldValue: show(rec[k]), newValue: show(patch[k]), userId: user?.id, userName: user?.name ?? 'System', at })))] : [])
+      ]
+    },
+
     async addNote(recordId, kind, title, body) {
       await db.insert(s.notes).values({ id: uid(), recordId, kind, title, body, userId: user?.id, userName: user?.name ?? 'System', at: nowIso() })
     },
