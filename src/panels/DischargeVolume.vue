@@ -72,7 +72,7 @@ async function load() {
   }
 }
 const nm = () => ({ [props.record.id]: { name: props.record.name, label: props.record.name, object: 'approval' } })
-const newMeter = (source) => openForm({ object: 'meter', defaults: { approvalId: props.record.id, source, usedForBilling: source === 'HiAffinity', kind: 'Inflow' }, names: nm(), title: source === 'HiAffinity' ? 'Add a HiAffinity Meter' : 'Add Manual Meter', onSaved: load })
+const newMeter = (source) => openForm({ object: 'meter', defaults: { approvalId: props.record.id, source, usedForBilling: source === 'HiAffinity', kind: 'Head Meter' }, names: nm(), title: source === 'HiAffinity' ? 'Add a HiAffinity Meter' : 'Add Manual Meter', onSaved: load })
 const newReading = (m) => openForm({ object: 'meterReading', defaults: { meterId: m.id }, names: { [m.id]: { name: m.name, label: m.name } }, title: `Add a Manual Meter Reading – ${m.name}`, onSaved: load })
 watch(() => [props.record.id, bus.version], load, { immediate: true })
 </script>

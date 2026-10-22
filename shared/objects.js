@@ -2,34 +2,38 @@
 const opt = (...xs) => xs
 
 export const PICKLISTS = {
-  approvalStatus: opt('In Progress', 'Active', 'Suspended', 'Cancelled'),
+  approvalStatus: opt('New', 'In Progress', 'Awaiting Information', 'Active', 'Suspended', 'Cancelled'),
   approvalType: opt('Trade Waste Approval', 'Special Disposal'),
   sewerType: opt('Gravity', 'Pressure', 'Rising Main'),
-  billingCategory: opt('Commercial – Food', 'Commercial – General', 'Light Industrial', 'Industrial', 'Key Corporate Account'),
+  billingCategory: opt('1', '2', '3', '4', '5'),
   twCategory: opt('A', 'B', 'C', 'D', 'E'),
   dischargeHours: opt('24 hours', 'Business hours (7am–7pm)', 'Conditional window', 'Batch release only'),
   metals: opt('Arsenic', 'Cadmium', 'Chromium', 'Copper', 'Lead', 'Mercury', 'Nickel', 'Zinc'),
   otherContaminants: opt('Fats, oils & grease', 'Hydrocarbons', 'Solvents', 'pH', 'Temperature', 'Detergents', 'Suspended solids'),
-  siteType: opt('Restaurant', 'Café', 'Bakery', 'Hotel', 'Shopping Centre', 'Food Court', 'Club / Tavern', 'Industrial Premises', 'Workshop', 'Hospital', 'School'),
+  siteType: opt('Restaurant', 'Café', 'Bakery', 'Hotel', 'Shopping Centre', 'Small Shopping Complex', 'Food Court', 'Food & Beverage Manufacturing', 'Club / Tavern', 'Industrial Premises', 'Workshop', 'Hospital', 'School'),
   activityType: opt('Food Services', 'General Trade Waste', 'Light Industrial', 'Industrial Compliance'),
-  ptsType: opt('Grease Arrestor', 'Oil/Water Separator', 'Coalescing Plate Separator', 'Silt Arrestor', 'Acid Neutraliser', 'pH Correction', 'Holding Tank', 'Sedimentation Tank', 'Lint Arrestor', 'Plaster Trap', 'Cooling Pit', 'Diversion Valve'),
+  ptsType: opt('Grease Arrestor', 'DAF System', 'Oil/Water Separator', 'Coalescing Plate Separator', 'Silt Arrestor', 'Acid Neutraliser', 'pH Correction', 'Holding Tank', 'Sedimentation Tank', 'Lint Arrestor', 'Plaster Trap', 'Cooling Pit', 'Diversion Valve'),
   ptsStatus: opt('Active', 'In Plan Assessment', 'Decommissioned'),
   fixtureType: opt('Sink', 'Pot sink', 'Hand basin', 'Dishwasher', 'Glass washer', 'Wok burner', 'Combi oven', 'Floor waste', 'Potato peeler', 'Rice washer'),
   contactType: opt('Company', 'Individual', 'Hydraulic Consultant'),
   contactRole: opt('Primary', 'Billing', 'Site', 'After hours', 'Consultant'),
-  meterKind: opt('Inflow', 'Discharge'),
+  meterKind: opt('Head Meter', 'TW Effluent'),
+  meterUsage: opt('TW_Effluent', 'Head_Meter', 'Alt_Supply'),
+  sampleType: opt('Aqueous', 'Sludge', 'Solid'),
+  resultSource: opt('SAS (Integration)', 'Manual', 'Lab Upload'),
+  instructionType: opt('Sampling', 'Site Access', 'Safety', 'Meter Reading'),
   meterSource: opt('HiAffinity', 'Manual'),
   activeInactive: opt('Active', 'Inactive'),
   supplyType: opt('Rainwater tank', 'Bore', 'Recycled water', 'Water carter'),
   sampleMethod: opt('Composite', 'Grab'),
   eventType: opt('TW - Routine', 'TW - Compliance', 'TW - Investigation', 'Self Monitoring'),
-  eventStatus: opt('Scheduled', 'Sample Collected', 'Results Received', 'Cancelled'),
+  eventStatus: opt('Scheduled', 'Sample Collected', 'Received', 'Cancelled'),
   sampleStatus: opt('Pending', 'Received'),
   paramGroup: opt('Billing', 'Inorganic', 'Nutrient', 'Metal', 'Organic', 'Physical'),
   caseType: opt('Customer Enquiry', 'Web Enquiry', 'Non-Compliance'),
-  caseStatus: opt('New', 'In Progress', 'Closed'),
+  caseStatus: opt('New', 'In Progress', 'Awaiting Response', 'Closed'),
   priority: opt('Low', 'Normal', 'High'),
-  nonComplianceType: opt('Exceeded acceptance criteria', 'Pre-treatment not maintained', 'Pump-out overdue', 'Unapproved discharge', 'Unauthorised modification', 'Records not available', 'Other'),
+  nonComplianceType: opt('Quality Violation', 'Daily Mass Load', 'Failure to Notify', 'TW Meter Not Showing', 'Pre-treatment Not Maintained', 'Pump-out Overdue', 'Unapproved Discharge', 'Other'),
   reportedBy: opt('UU Internal', 'Customer', 'Laboratory', 'WasteID', 'Council', 'Public'),
   cause: opt('Equipment failure', 'Poor maintenance', 'Process change', 'Operator error', 'Overloading', 'Unknown'),
   taskStatus: opt('Not Started', 'In Progress', 'Waiting on someone else', 'Completed'),
@@ -75,7 +79,7 @@ export const OBJECTS = {
       f('tradingName', 'Trading Name', 'text', { required: true }),
       look('billingAccountId', 'Billing Account', 'billingAccount'), f('propertyAddress', 'Property Address'),
       look('catchmentId', 'Catchment', 'catchment'), pick('sewerType', 'Sewer Type', PICKLISTS.sewerType),
-      pick('billingCategory', 'Billing Category', PICKLISTS.billingCategory), pick('twCategory', 'Trade Waste Category', PICKLISTS.twCategory),
+      pick('billingCategory', 'Billing Category', PICKLISTS.billingCategory, { help: 'HiAffinity billing category code (1–5)' }), pick('twCategory', 'Trade Waste Category', PICKLISTS.twCategory),
       look('linkedApprovalId', 'Linked Approval', 'approval'), look('pumpStationId', 'Sewage Pump Station', 'pumpStation'),
       f('kca', 'Key Corporate Account', 'checkbox'),
       f('applicationReceivedDate', 'Application Received', 'date', { defaultToday: true }), f('issueDate', 'Issue Date', 'date'),
@@ -149,14 +153,14 @@ export const OBJECTS = {
     fields: [
       look('siteId', 'Site', 'site', { required: true }), look('occupierId', 'Occupier', 'occupier', { help: 'Leave blank for a shared, site-level system' }),
       look('approvalId', 'Approval', 'approval', ro),
-      pick('ptsType', 'System Type', PICKLISTS.ptsType, { required: true }), f('capacity', 'Capacity (L)', 'number'),
+      pick('ptsType', 'System Type', PICKLISTS.ptsType, { required: true }), f('flowCapacity', 'Flow Capacity (L/s)', 'number'), f('capacity', 'Volume Capacity (L)', 'number'),
       pick('status', 'Status', PICKLISTS.ptsStatus, { default: 'Active' }),
       f('psid', 'PSID (WasteID Device)', 'text', { help: 'WasteID device reference, e.g. DV0653331' }),
       f('locationDesc', 'Location on Site'), f('installDate', 'Install Date', 'date'),
       f('pumpOutWeeks', 'Pump-out Frequency (weeks)', 'number'), f('manufacturer', 'Make / Model')
     ],
-    highlights: ['ptsType', 'capacity', 'status', 'psid', 'siteId', 'occupierId'],
-    list: ['name', 'ptsType', 'capacity', 'psid', 'siteId', 'occupierId', 'status'], search: ['psid', 'locationDesc'], path: 'status'
+    highlights: ['ptsType', 'capacity', 'flowCapacity', 'status', 'psid', 'siteId', 'occupierId'],
+    list: ['name', 'ptsType', 'flowCapacity', 'capacity', 'psid', 'siteId', 'occupierId', 'status'], search: ['psid', 'locationDesc'], path: 'status'
   },
 
   fixture: {
@@ -214,10 +218,20 @@ export const OBJECTS = {
     label: 'Sample Parameter', plural: 'Default Sample Parameters', icon: 'List', color: '#ff9a3c', nameFrom: 'parameterName', parent: 'approvalId',
     fields: [
       look('approvalId', 'Approval', 'approval', { required: true }), look('parameterId', 'Test Parameter', 'testParameter', { required: true }),
-      f('parameterName', 'Parameter', 'text', ro), f('limit', 'Acceptance Limit', 'number'), f('unit', 'Unit', 'text', ro),
+      f('parameterName', 'Parameter', 'text', ro), f('limit', 'Upper Concentration', 'number'), f('lowerLimit', 'Lower Concentration', 'number'), f('ncTolerance', 'NC Tolerance (%)', 'number', { default: 10, help: 'Results within this percentage above the upper limit are not flagged' }), f('unit', 'Unit', 'text', ro),
       f('variation', 'Variation Applied', 'checkbox'), f('variationLimit', 'Variation Limit', 'number'), f('variationReason', 'Variation Reason')
     ],
-    list: ['parameterId', 'limit', 'unit', 'variation', 'variationLimit']
+    list: ['parameterId', 'limit', 'lowerLimit', 'ncTolerance', 'unit', 'variation', 'variationLimit']
+  },
+
+  workInstruction: {
+    label: 'Sampling Work Instruction', plural: 'Sampling Work Instructions', icon: 'Notebook', color: '#ff9a3c', prefix: 'SWI-', digits: 5, start: 1, parent: 'approvalId',
+    fields: [
+      look('approvalId', 'Approval', 'approval', { required: true }), look('siteId', 'Site', 'site'), look('sampleLocationId', 'Sample Location', 'sampleLocation'),
+      f('title', 'Title', 'text', { required: true }), pick('instructionType', 'Type', PICKLISTS.instructionType, { default: 'Sampling' }),
+      f('instructions', 'Instructions', 'textarea', { required: true }), pick('status', 'Status', PICKLISTS.activeInactive, { default: 'Active' })
+    ],
+    list: ['name', 'title', 'instructionType', 'sampleLocationId', 'status']
   },
 
   samplingEvent: {
@@ -227,30 +241,54 @@ export const OBJECTS = {
       pick('status', 'Status', PICKLISTS.eventStatus, { default: 'Scheduled' }),
       f('scheduledDate', 'Scheduled Date', 'date', { required: true, defaultToday: true }), f('sampleDate', 'Sample Date', 'date'),
       f('collector', 'Sample Collector'), f('limsId', 'LIMS ID', 'text', ro), f('labName', 'Laboratory', 'text', { default: 'SAS Labs' }),
-      f('meterStart', '24h Meter Start (kL)', 'number'), f('meterEnd', '24h Meter End (kL)', 'number'), f('volumeKl', '24h Discharge (kL)', 'number', ro),
+      f('volumeKl', '24h Discharge (kL)', 'number', { ...ro, help: 'Sum of the Sampling Event Meters' }),
       f('massLoadCalculated', 'Mass Load Calculated', 'checkbox', ro), f('massLoadAt', 'Mass Load Calculated At', 'datetime', ro),
       f('comments', 'Comments', 'textarea')
     ],
     sections: [
       { label: 'Event', fields: ['name', 'approvalId', 'eventType', 'status', 'scheduledDate', 'sampleDate', 'collector', 'ownerId'] },
       { label: 'Laboratory', fields: ['labName', 'limsId'] },
-      { label: '24 Hour Discharge', fields: ['meterStart', 'meterEnd', 'volumeKl', 'massLoadCalculated', 'massLoadAt'] },
+      { label: '24 Hour Discharge', fields: ['volumeKl', 'massLoadCalculated', 'massLoadAt'] },
       { label: 'Other', fields: ['comments'] }
     ],
     highlights: ['approvalId', 'eventType', 'status', 'sampleDate', 'limsId', 'volumeKl'],
     list: ['name', 'scheduledDate', 'eventType', 'sampleDate', 'collector', 'limsId', 'status'], path: 'status'
   },
 
-  sample: {
-    label: 'Sample', plural: 'Samples', icon: 'Goblet', color: '#d4504c', prefix: 'SA-', digits: 6, start: 40000, parent: 'samplingEventId',
+  sampleLocationEvent: {
+    label: 'Sample Location Event', plural: 'Sample Location Events', icon: 'Location', color: '#d4504c', prefix: 'SLE-', digits: 5, start: 5000, parent: 'samplingEventId',
     fields: [
       look('samplingEventId', 'Sampling Event', 'samplingEvent', { required: true }), look('sampleLocationId', 'Sample Location', 'sampleLocation', { required: true }),
-      look('approvalId', 'Approval', 'approval', ro), pick('method', 'Sampling Method', PICKLISTS.sampleMethod, { default: 'Composite' }),
-      f('collectedAt', 'Collected At', 'datetime'), f('limsSampleId', 'LIMS Sample ID', 'text', ro),
-      pick('status', 'Status', PICKLISTS.sampleStatus, { default: 'Pending' }), f('excludeFromBilling', 'Exclude from Billing', 'checkbox'),
-      f('excludeReason', 'Exclusion Reason')
+      look('approvalId', 'Approval', 'approval', ro),
+      f('excludedFromBilling', 'Excluded from Billing', 'checkbox', { help: 'Samples taken at this location in this event are ignored by the billing run' }),
+      f('exclusionReason', 'Exclusion Reason'), f('comments', 'Comments', 'textarea')
     ],
-    list: ['name', 'sampleLocationId', 'method', 'limsSampleId', 'status', 'excludeFromBilling']
+    list: ['name', 'sampleLocationId', 'excludedFromBilling', 'exclusionReason']
+  },
+
+  eventMeter: {
+    label: 'Sampling Event Meter', plural: 'Sampling Event Meters', icon: 'Odometer', color: '#d4504c', prefix: 'SEM-', digits: 5, start: 1, parent: 'samplingEventId',
+    fields: [
+      look('samplingEventId', 'Sampling Event', 'samplingEvent', { required: true }), look('sampleLocationId', 'Sample Location', 'sampleLocation'),
+      look('meterId', 'Meter', 'meter'), look('approvalId', 'Approval', 'approval', ro),
+      f('pitReference', 'Pit Reference'), f('serialNo', 'Serial Number'), pick('meterUsage', 'Meter Usage', PICKLISTS.meterUsage, { default: 'TW_Effluent' }),
+      f('startReading', 'Start Meter Reading (kL)', 'number', { required: true }), f('endReading', 'End Meter Reading (kL)', 'number', { required: true }),
+      f('volumeKl', 'Volume (kL)', 'number', ro)
+    ],
+    list: ['name', 'sampleLocationId', 'pitReference', 'serialNo', 'meterUsage', 'startReading', 'endReading', 'volumeKl']
+  },
+
+  sample: {
+    label: 'Sample', plural: 'Samples', icon: 'Goblet', color: '#d4504c', prefix: 'SA-', digits: 6, start: 40000, parent: 'sampleLocationEventId',
+    fields: [
+      look('sampleLocationEventId', 'Sample Location Event', 'sampleLocationEvent', { required: true }),
+      look('samplingEventId', 'Sampling Event', 'samplingEvent', ro), look('sampleLocationId', 'Sample Location', 'sampleLocation', ro),
+      look('approvalId', 'Approval', 'approval', ro), pick('method', 'Sampling Method', PICKLISTS.sampleMethod, { default: 'Composite' }),
+      pick('sampleType', 'Sample Type', PICKLISTS.sampleType, { default: 'Aqueous' }),
+      f('collectedAt', 'Collected At', 'datetime'), f('limsSampleId', 'LIMS Sample ID', 'text', ro),
+      pick('status', 'Status', PICKLISTS.sampleStatus, { default: 'Pending' })
+    ],
+    list: ['name', 'sampleLocationId', 'method', 'sampleType', 'limsSampleId', 'status']
   },
 
   sampleResult: {
@@ -258,8 +296,10 @@ export const OBJECTS = {
     fields: [
       look('sampleId', 'Sample', 'sample', { required: true }), look('samplingEventId', 'Sampling Event', 'samplingEvent', ro), look('approvalId', 'Approval', 'approval', ro),
       look('parameterId', 'Test Parameter', 'testParameter', { required: true }), f('parameterName', 'Parameter', 'text', ro),
-      f('value', 'Result', 'number', { required: true }), f('unit', 'Unit', 'text', ro), f('limit', 'Limit', 'number', ro),
-      f('exceeded', 'Exceeded', 'checkbox', ro), f('massLoadKg', 'Mass Load (kg)', 'number', ro)
+      f('value', 'Result', 'number', { required: true }), f('unit', 'Unit', 'text', ro),
+      f('limit', 'Upper Concentration', 'number', ro), f('lowerLimit', 'Lower Concentration', 'number', ro), f('ncTolerance', 'NC Tolerance (%)', 'number', ro),
+      f('exceeded', 'Exceeded', 'checkbox', ro), f('massLoadKg', 'Mass Load (kg)', 'number', ro),
+      pick('resultSource', 'Result Source', PICKLISTS.resultSource, { default: 'Manual' })
     ],
     list: ['parameterId', 'value', 'unit', 'limit', 'exceeded', 'massLoadKg']
   },
@@ -407,9 +447,9 @@ export const OBJECTS = {
       f('inflowKl', 'Metered Volume (kL)', 'number', ro), f('dischargeFactor', 'Sewage Discharge Factor', 'number', ro),
       f('domesticOffsetKl', 'Domestic Offset (kL)', 'number', ro), f('tradeWasteKl', 'Trade Waste Volume (kL)', 'number', ro),
       f('deemed', 'Deemed Quality', 'checkbox', ro), f('ss', 'SS (mg/L)', 'number', ro), f('bod', 'BOD (mg/L)', 'number', ro), f('n', 'Nitrogen (mg/L)', 'number', ro), f('p', 'Phosphorus (mg/L)', 'number', ro),
-      f('sampleCount', 'Samples Used', 'number', ro), f('amount', 'Amount (ex GST)', 'currency', ro), f('breakdown', 'Breakdown', 'json', ro)
+      f('sampleCount', 'Samples Used', 'number', ro), f('amount', 'Total Amount (ex GST)', 'currency', ro), f('gst', 'Total GST', 'currency', ro), f('total', 'Total Amount (inc GST)', 'currency', ro), f('breakdown', 'Breakdown', 'json', ro)
     ],
-    list: ['name', 'approvalId', 'tradeWasteKl', 'ss', 'bod', 'n', 'p', 'deemed', 'amount', 'invoiceId']
+    list: ['name', 'approvalId', 'tradeWasteKl', 'ss', 'bod', 'n', 'p', 'deemed', 'amount', 'gst', 'total', 'invoiceId']
   },
 
   invoice: {

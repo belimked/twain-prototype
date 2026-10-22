@@ -75,9 +75,9 @@ const newPts = (s, o) => openForm({ object: 'pts', defaults: { siteId: s.id, occ
 const newFixture = (o) => openForm({ object: 'fixture', defaults: { occupierId: o.id }, names: { [o.id]: { name: o.name, label: o.name } }, onSaved: load })
 
 const PtsTable = (p) => h('table', { class: 'pts-table' }, [
-  h('thead', h('tr', ['System', 'Type', 'Capacity (L)', 'PSID (WasteID)', 'Location', 'Status'].map((t) => h('th', t)))),
+  h('thead', h('tr', ['System', 'Type', 'Flow (L/s)', 'Volume (L)', 'PSID (WasteID)', 'Location', 'Status'].map((t) => h('th', t)))),
   h('tbody', p.rows.map((r) => h('tr', { key: r.id }, [
-    h('td', h('a', { class: 'table-link', onClick: () => openRecord('pts', r.id, r.name) }, r.name)), h('td', r.ptsType), h('td', { class: 'mono' }, r.capacity ?? ''),
+    h('td', h('a', { class: 'table-link', onClick: () => openRecord('pts', r.id, r.name) }, r.name)), h('td', r.ptsType), h('td', { class: 'mono' }, r.flowCapacity ?? ''), h('td', { class: 'mono' }, r.capacity ?? ''),
     h('td', r.psid ? h('a', { onClick: () => openRecord('pts', r.id, r.name) }, r.psid) : ''), h('td', r.locationDesc || ''), h('td', h(StatusTag, { value: r.status }))
   ])))
 ])

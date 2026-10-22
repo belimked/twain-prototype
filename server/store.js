@@ -141,7 +141,8 @@ export function createStore(db, user, hooks = {}) {
       return rows.map(toRecord)
     },
 
-    async create(object, input, { system = false, raw = false } = {}) {
+    async create(object, input, { system = false, raw = false, actor = null } = {}) {
+      const who = actor ?? user?.name ?? 'System'
       const def = defOf(object)
       let data = applyDefaults(def, sanitize(def, input, { system }))
       if (def.owner || def.queue) data.ownerId = input.ownerId !== undefined ? input.ownerId || null : user?.id ?? null
@@ -152,17 +153,18 @@ export function createStore(db, user, hooks = {}) {
       const at = nowIso()
       const ownerId = data.ownerId ?? null
       delete data.ownerId
-      const row = { id, object, name, ownerId, data, createdAt: at, createdBy: user?.name ?? 'System', updatedAt: at, updatedBy: user?.name ?? 'System', ...columnsFor(def, data) }
+      const row = { id, object, name, ownerId, data, createdAt: at, createdBy: who, updatedAt: at, updatedBy: who, ...columnsFor(def, data) }
       await db.batch([
         db.insert(s.records).values(row),
-        db.insert(s.history).values({ id: uid(), recordId: id, object, field: '__created', newValue: name, userId: user?.id, userName: user?.name ?? 'System', at })
+        db.insert(s.history).values({ id: uid(), recordId: id, object, field: '__created', newValue: name, userId: actor ? null : user?.id, userName: who, at })
       ])
       const rec = toRecord(row)
       if (!raw && hooks.afterSave) await hooks.afterSave(store, def, rec, null)
       return rec
     },
 
-    async update(id, input, { system = false, raw = false } = {}) {
+    async update(id, input, { system = false, raw = false, actor = null } = {}) {
+      const who = actor ?? user?.name ?? 'System'
       const before = await store.must(id)
       const def = defOf(before.object)
       const patch = sanitize(def, input, { system })
@@ -181,8 +183,8 @@ export function createStore(db, user, hooks = {}) {
       delete data.ownerId
       const name = def.prefix ? before.name : nameFor(def, data)
       await db.batch([
-        db.update(s.records).set({ data, name, ownerId, updatedAt: at, updatedBy: user?.name ?? 'System', ...columnsFor(def, data) }).where(eq(s.records.id, id)),
-        ...chunk(changes, 10).map((c) => db.insert(s.history).values(c.map((x) => ({ id: uid(), recordId: id, object: def.key, ...x, userId: user?.id, userName: user?.name ?? 'System', at }))))
+        db.update(s.records).set({ data, name, ownerId, updatedAt: at, updatedBy: who, ...columnsFor(def, data) }).where(eq(s.records.id, id)),
+        ...chunk(changes, 10).map((c) => db.insert(s.history).values(c.map((x) => ({ id: uid(), recordId: id, object: def.key, ...x, userId: actor ? null : user?.id, userName: who, at }))))
       ])
       const rec = await store.get(id)
       if (!raw && hooks.afterSave) await hooks.afterSave(store, def, rec, before)
@@ -198,6 +200,7 @@ export function createStore(db, user, hooks = {}) {
         db.delete(s.notes).where(eq(s.notes.recordId, id)),
         db.delete(s.files).where(eq(s.files.recordId, id))
       ])
+      if (hooks.afterRemove) await hooks.afterRemove(store, defOf(rec.object), rec)
       return rec
     },
 

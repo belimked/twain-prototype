@@ -69,10 +69,10 @@ function activityFor(devices) {
   if (types.every((t) => t === 'Grease Arrestor')) return 'Food Services'
   return 'General Trade Waste'
 }
-function siteTypeFor(name, activity, multi) {
-  if (multi) return 'Shopping Centre'
+function siteTypeFor(name, activity, multi, locs = []) {
+  if (multi) return locs.length >= 4 ? 'Shopping Centre' : 'Small Shopping Complex'
   if (activity === 'Light Industrial') return 'Workshop'
-  if (activity === 'Industrial Compliance') return 'Industrial Premises'
+  if (activity === 'Industrial Compliance') return /food|bever|dairy|bakery|brew/i.test(name) ? 'Food & Beverage Manufacturing' : 'Industrial Premises'
   const n = name.toLowerCase()
   if (/patisserie|bakery|bakehouse/.test(n)) return 'Bakery'
   if (/hotel/.test(n)) return 'Hotel'
@@ -166,7 +166,7 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
   const address = titleCase(first.ad) || 'Unknown address'
   const suburb = titleCase(first.s)
   const tradingName = centre || first.name
-  const status = r.next() < 0.86 ? 'Active' : r.pick(['In Progress', 'In Progress', 'Suspended', 'Cancelled'])
+  const status = r.next() < 0.86 ? 'Active' : r.pick(['New', 'In Progress', 'Awaiting Information', 'Suspended', 'Cancelled'])
   const received = `${r.int(2014, 2024)}-${String(r.int(1, 12)).padStart(2, '0')}-${String(r.int(1, 28)).padStart(2, '0')}`
   const issueDate = status === 'In Progress' ? null : addDays(received, r.int(20, 90))
   const employees = r.int(activity === 'Food Services' ? 3 : 8, activity === 'Food Services' ? 35 : 120)
@@ -185,7 +185,7 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
   add('approval', approvalId, num('approval', 11000 + idx), {
     type: 'Trade Waste Approval', status, tradingName, billingAccountId: accountId, propertyAddress: `${address}, ${suburb} QLD ${first.pc || ''}`.trim(),
     catchmentId: catchment, sewerType: r.chance(0.85) ? 'Gravity' : r.pick(['Pressure', 'Rising Main']),
-    billingCategory: kca ? 'Key Corporate Account' : activity === 'Food Services' ? 'Commercial – Food' : activity === 'Light Industrial' ? 'Light Industrial' : activity === 'Industrial Compliance' ? 'Industrial' : 'Commercial – General',
+    billingCategory: kca ? '1' : activity === 'Food Services' ? '2' : activity === 'General Trade Waste' ? '3' : activity === 'Light Industrial' ? '4' : '5',
     twCategory: (devices[0]?.cat || 'E').replace(/[^A-E]/g, '').slice(-1) || 'E', kca,
     pumpStationId: r.chance(0.35) ? PUMP_STATIONS.find((p) => p[3] === catchment)?.[0] ?? null : null,
     applicationReceivedDate: received, issueDate, cancelledDate: status === 'Cancelled' ? addDays(issueDate || received, r.int(400, 2000)) : null,
@@ -217,7 +217,7 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
   const siteId = id('st')
   add('site', siteId, multi ? tradingName : first.name, {
     approvalId, siteName: multi ? tradingName : first.name, address, suburb, postcode: first.pc || null,
-    siteType: siteTypeFor(first.name, activity, multi), activityType: activity, status: status === 'Cancelled' ? 'Inactive' : 'Active',
+    siteType: siteTypeFor(first.name, activity, multi, locs), activityType: activity, status: status === 'Cancelled' ? 'Inactive' : 'Active',
     lat: first.lat, lng: first.lng, wasteidLocationId: first.id
   })
   const ptsIds = []
@@ -236,7 +236,7 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
       ptsOfOcc.push(pid)
       ptsIds.push({ id: pid, d, occId })
       add('pts', pid, num('pts', 100000 + deviceIndex[d.ref]), {
-        siteId, occupierId: occId, approvalId, ptsType: PTS_TYPE[d.t] || d.t, capacity: d.c || null,
+        siteId, occupierId: occId, approvalId, ptsType: PTS_TYPE[d.t] || d.t, capacity: d.c || null, flowCapacity: d.c ? Math.round(d.c / 600 * 10) / 10 : null,
         status: d.st === 'Inactive' ? 'Decommissioned' : 'Active', psid: d.ref, locationDesc: d.ld || null,
         installDate: addDays(received, -r.int(30, 400)), pumpOutWeeks: d.fw || null, manufacturer: r.pick(['Humes', 'Everhard', 'Rotoplas', 'Atlantis', null])
       })
@@ -248,21 +248,24 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
   })
 
   // Meters: quarterly readings dated on the last day of each billing period.
-  const meters = [{ kind: 'Inflow', source: 'HiAffinity', usedForBilling: true, meterNo: `${r.int(10, 99)}W${r.int(100000, 999999)}` }]
-  if (sampled && activity !== 'Food Services') meters.push({ kind: 'Discharge', source: 'Manual', usedForBilling: true, meterNo: `TW${r.int(10000, 99999)}` })
+  const meters = [{ kind: 'Head Meter', source: 'HiAffinity', usedForBilling: true, meterNo: `${r.int(10, 99)}W${r.int(100000, 999999)}` }]
+  if (sampled && activity !== 'Food Services') meters.push({ kind: 'TW Effluent', source: 'Manual', usedForBilling: true, meterNo: `TW${r.int(10000, 99999)}` })
   let altId = null
   if (activity !== 'Food Services' && r.chance(0.25)) {
     altId = id('al')
     add('alternateSupply', altId, `ALT-${String(idx + 1).padStart(4, '0')}`, { approvalId, supplyType: r.pick(['Rainwater tank', 'Bore']), description: 'Used for wash-down and cooling tower make-up', status: 'Active' })
-    meters.push({ kind: 'Inflow', source: 'Manual', usedForBilling: false, meterNo: `ALT${r.int(1000, 9999)}`, alternateSupplyId: altId })
+    meters.push({ kind: 'Head Meter', source: 'Manual', usedForBilling: false, meterNo: `ALT${r.int(1000, 9999)}`, alternateSupplyId: altId })
   }
   const anchor = nextBill || addMonths(monthStart, -1)
   const quarters = sampled ? 8 : 4
   let mr = 0
+  const meterIds = []
   meters.forEach((m, mi) => {
     const meterId = id('me')
-    add('meter', meterId, m.meterNo, { approvalId, ...m, status: 'Active', installDate: addDays(received, -10), serialNo: `SN${r.int(100000, 999999)}` })
-    const perQuarter = (m.kind === 'Discharge' ? 0.9 : 1) * (activity === 'Food Services' ? r.num(90, 450) : r.num(400, 3500))
+    const serialNo = `SN${r.int(100000, 999999)}`
+    meterIds.push({ id: meterId, kind: m.kind, serialNo })
+    add('meter', meterId, m.meterNo, { approvalId, ...m, status: 'Active', installDate: addDays(received, -10), serialNo })
+    const perQuarter = (m.kind === 'TW Effluent' ? 0.9 : 1) * (activity === 'Food Services' ? r.num(90, 450) : r.num(400, 3500))
     let reading = r.int(1000, 90000)
     for (let q = quarters; q >= 0; q--) {
       const readingDate = addDays(addMonths(anchor, -3 * q), -1)
@@ -278,7 +281,7 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
     const params = TEST_PARAMS.filter((p) => p[7] === 'all' || p[7].includes(activity))
     for (const [pid, code, paramName, unit, , defaultLimit] of params) {
       const variation = pid === 'tp_ss' && r.chance(0.1)
-      add('sampleParameter', id('sp'), paramName, { approvalId, parameterId: pid, parameterName: paramName, unit, limit: defaultLimit, variation, variationLimit: variation ? defaultLimit * 1.5 : null, variationReason: variation ? 'Approved variation – process upgrade' : null })
+      add('sampleParameter', id('sp'), paramName, { approvalId, parameterId: pid, parameterName: paramName, unit, limit: defaultLimit, lowerLimit: code === 'SGV_PH' ? 6 : null, ncTolerance: 10, variation, variationLimit: variation ? defaultLimit * 1.5 : null, variationReason: variation ? 'Approved variation – process upgrade' : null })
     }
     const slN = r.int(1, 3)
     const sls = []
@@ -287,12 +290,22 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
       sls.push(slId)
       add('sampleLocation', slId, `SL${500 + idx * 3 + k}`, { approvalId, siteId, description: ['Final discharge pit', 'Pre-treatment outlet', 'Boundary trap'][k], method: k === 0 ? 'Composite' : 'Grab', usedForBilling: k === 0, isDefault: k === 0, status: 'Active' })
     }
+    add('workInstruction', id('swi'), num('workInstruction', 1 + idx * 2), {
+      approvalId, siteId, sampleLocationId: sls[0], title: 'Composite sampling at the final discharge pit', instructionType: 'Sampling',
+      instructions: 'Install the auto-sampler at the discharge pit before 7am. Collect a 24h flow-weighted composite. Record the TW effluent meter start and end readings on the Sampling Event Meter.', status: 'Active'
+    })
+    if (multi || activity !== 'Food Services') {
+      add('workInstruction', id('swi'), num('workInstruction', 2 + idx * 2), {
+        approvalId, siteId, sampleLocationId: null, title: 'Site access and safety', instructionType: 'Site Access',
+        instructions: multi ? 'Report to centre management before accessing the loading dock. Sample pits are in the basement car park.' : 'Sign in at the site office; hi-vis and steel caps required. Confined space entry is not permitted.', status: 'Active'
+      })
+    }
     const evN = kca ? 8 : 4
     for (let e = evN; e >= -1; e--) {
       const scheduledDate = addDays(addMonths(anchor, -3 * e), -r.int(15, 40))
       const future = scheduledDate > today
       const collectedOnly = e === 0 && !future && idx % 9 === 0
-      const st = future ? 'Scheduled' : collectedOnly ? 'Sample Collected' : 'Results Received'
+      const st = future ? 'Scheduled' : collectedOnly ? 'Sample Collected' : 'Received'
       const evId = id('se')
       const evNo = num('samplingEvent', 6000 + idx * 12 + (evN - e + 1))
       const start = r.int(20000, 90000)
@@ -300,19 +313,29 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
       add('samplingEvent', evId, evNo, {
         approvalId, eventType: e === evN && r.chance(0.3) ? 'TW - Compliance' : 'TW - Routine', status: st, scheduledDate, sampleDate: future ? null : scheduledDate,
         collector: future ? null : r.pick(['Field Services – J. Carter', 'Field Services – M. Ruiz', 'ALS Field Team']), limsId: future ? null : `LIMS-${2000000 + idx * 20 + e + 5}`,
-        labName: 'SAS Labs', meterStart: future ? null : start, meterEnd: future ? null : Math.round((start + vol) * 10) / 10, volumeKl: future ? null : vol,
-        massLoadCalculated: st === 'Results Received', massLoadAt: st === 'Results Received' ? `${addDays(scheduledDate, 9)}T10:00:00.000Z` : null, ownerId,
+        labName: 'SAS Labs', volumeKl: future ? null : vol,
+        massLoadCalculated: st === 'Received', massLoadAt: st === 'Received' ? `${addDays(scheduledDate, 9)}T10:00:00.000Z` : null, ownerId,
         createdAt: `${addDays(scheduledDate, -20)}T08:00:00.000Z`
       })
       if (future) continue
+      // 24h discharge: one Sampling Event Meter at the billing sample location.
+      const twMeter = meterIds.find((m) => m.kind === 'TW Effluent') || meterIds[0]
+      add('eventMeter', id('sem'), num('eventMeter', 1 + idx * 12 + (evN - e + 1)), {
+        samplingEventId: evId, sampleLocationId: sls[0], meterId: twMeter?.id ?? null, approvalId, pitReference: `W/${r.int(10000000, 10999999)}`,
+        serialNo: twMeter?.serialNo ?? null, meterUsage: 'TW_Effluent', startReading: start, endReading: Math.round((start + vol) * 10) / 10, volumeKl: vol
+      })
       let ncRaised = false
       sls.forEach((slId, k) => {
         if (k > 0 && !r.chance(0.4)) return
+        const sleId = id('sle')
+        add('sampleLocationEvent', sleId, num('sampleLocationEvent', 5000 + idx * 12 * 3 + (evN - e + 1) * 3 + k), {
+          samplingEventId: evId, sampleLocationId: slId, approvalId, excludedFromBilling: false, exclusionReason: null
+        })
         const saId = id('sa')
         const method = k === 0 ? 'Composite' : 'Grab'
         add('sample', saId, num('sample', 40000 + idx * 40 + (evN - e + 1) * 3 + k), {
-          samplingEventId: evId, sampleLocationId: slId, approvalId, method, collectedAt: `${scheduledDate}T07:30:00.000Z`,
-          limsSampleId: `LIMS-${2000000 + idx * 20 + e + 5}-${k + 1}`, status: collectedOnly ? 'Pending' : 'Received', excludeFromBilling: false
+          sampleLocationEventId: sleId, samplingEventId: evId, sampleLocationId: slId, approvalId, method, sampleType: 'Aqueous', collectedAt: `${scheduledDate}T07:30:00.000Z`,
+          limsSampleId: `LIMS-${2000000 + idx * 20 + e + 5}-${k + 1}`, status: collectedOnly ? 'Pending' : 'Received'
         })
         if (collectedOnly) return
         for (const [pid, code, paramName, unit, , defaultLimit] of params) {
@@ -320,15 +343,15 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
           const exceed = r.chance(0.006)
           const value = typical !== undefined ? r.num(typical * 0.9, typical * 1.1, 1) : exceed ? r.num(defaultLimit * 1.05, defaultLimit * 1.6, 1) : r.num(defaultLimit * 0.08, defaultLimit * 0.75, defaultLimit < 10 ? 2 : 1)
           add('sampleResult', id('rs'), paramName, {
-            sampleId: saId, samplingEventId: evId, approvalId, parameterId: pid, parameterName: paramName, value, unit, limit: defaultLimit,
-            exceeded: value > defaultLimit, massLoadKg: method === 'Composite' && unit === 'mg/L' ? Math.round(value * vol) / 1000 : null
+            sampleId: saId, samplingEventId: evId, approvalId, parameterId: pid, parameterName: paramName, value, unit, limit: defaultLimit, lowerLimit: null, ncTolerance: 10,
+            exceeded: value > defaultLimit * 1.1, resultSource: 'SAS (Integration)', massLoadKg: method === 'Composite' && unit === 'mg/L' ? Math.round(value * vol) / 1000 : null
           })
-          if (value > defaultLimit && k === 0 && !ncRaised) {
+          if (value > defaultLimit * 1.1 && k === 0 && !ncRaised) {
             ncRaised = true
             const open = e <= 1
             add('case', id('cs'), num('case', 52000 + idx * 12 + (evN - e + 1)), {
-              caseType: 'Non-Compliance', subject: `Exceedance – ${evNo} – ${tradingName}`, status: open ? 'In Progress' : 'Closed', priority: 'High',
-              approvalId, samplingEventId: evId, nonComplianceType: 'Exceeded acceptance criteria', reportedBy: 'Laboratory', incidentDate: scheduledDate,
+              caseType: 'Non-Compliance', subject: `Quality Violation – ${evNo} – ${tradingName}`, status: open ? r.pick(['In Progress', 'Awaiting Response']) : 'Closed', priority: 'High',
+              approvalId, samplingEventId: evId, nonComplianceType: 'Quality Violation', reportedBy: 'Laboratory', incidentDate: scheduledDate,
               description: `${paramName}: ${value} ${unit} (limit ${defaultLimit})`, cause: open ? null : r.pick(['Poor maintenance', 'Process change', 'Overloading']),
               outcome: open ? null : 'Follow-up sample within limits', preventativeAction: open ? null : 'Increased pump-out frequency', correctiveAction: open ? null : 'Pre-treatment serviced',
               resolutionDate: open ? null : addDays(scheduledDate, 45), ownerId, createdAt: `${addDays(scheduledDate, 10)}T09:00:00.000Z`
@@ -346,7 +369,7 @@ function seedApproval(add, idx, agreement, locs, centre, today) {
     if (due >= today || !r.chance(0.5)) return
     add('case', id('cs'), num('case', 52000 + idx * 12 + 10 + k % 2), {
       caseType: 'Non-Compliance', subject: `Pump-out overdue – ${d.ref} – ${tradingName}`, status: r.chance(0.4) ? 'New' : 'In Progress', priority: 'Normal',
-      approvalId, occupierId: occId, ptsId: pid, nonComplianceType: 'Pump-out overdue', reportedBy: 'WasteID', incidentDate: due,
+      approvalId, occupierId: occId, ptsId: pid, nonComplianceType: 'Pump-out Overdue', reportedBy: 'WasteID', incidentDate: due,
       description: `WasteID shows the last pump-out on ${d.ls.slice(0, 10)}; the ${d.fw}-week frequency was due on ${due}.`,
       ownerId: r.chance(0.3) ? null : ownerId, createdAt: `${addDays(due, 3)}T06:00:00.000Z`
     })

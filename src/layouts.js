@@ -43,18 +43,26 @@ export const LAYOUTS = {
       },
       { key: 'history', label: 'History' }
     ],
-    actions: ['cancelApproval', 'changeFrequencies', 'setDefaultParameters', 'newNonCompliance', 'newTask'],
-    activity: true
+    actions: ['cancelApproval', 'changeFrequencies', 'setDefaultParameters', 'addCondition', 'newNonCompliance', 'newTask'],
+    activity: true, files: true
   },
-  site: { tabs: [{ key: 'details', label: 'Details' }, { key: 'occupiers', label: 'Occupiers', related: [rel('occupier', 'siteId', 'Occupiers'), rel('pts', 'siteId', 'Pre-Treatment Systems')] }, { key: 'samples', label: 'Sample Locations', related: [rel('sampleLocation', 'siteId', 'Sample Locations')] }, { key: 'history', label: 'History' }] },
+  site: { tabs: [{ key: 'details', label: 'Details' }, { key: 'occupiers', label: 'Occupiers', related: [rel('occupier', 'siteId', 'Occupiers'), rel('pts', 'siteId', 'Pre-Treatment Systems')] }, { key: 'samples', label: 'Sample Locations', related: [rel('sampleLocation', 'siteId', 'Sample Locations')] }, { key: 'instructions', label: 'Work Instructions', related: [rel('workInstruction', 'siteId', 'Sampling Work Instructions')] }, { key: 'history', label: 'History' }] },
   occupier: { tabs: [{ key: 'details', label: 'Details' }, { key: 'pts', label: 'Pre-Treatment', related: [rel('pts', 'occupierId', 'Occupier Pre-Treatment'), rel('fixture', 'occupierId', 'Occupier Fixtures')] }, { key: 'cases', label: 'Cases', related: [rel('case', 'occupierId', 'Cases')] }, { key: 'history', label: 'History' }] },
   pts: { tabs: [{ key: 'details', label: 'Details' }, { key: 'cases', label: 'Cases', related: [rel('case', 'ptsId', 'Pre-Treatment Cases'), rel('inspection', 'ptsId', 'Inspections'), rel('fixture', 'ptsId', 'Connected Fixtures')] }, { key: 'history', label: 'History' }], side: 'WasteIdCard', actions: ['newNonCompliance'] },
   meter: { tabs: [{ key: 'details', label: 'Details' }, { key: 'readings', label: 'Readings', related: [rel('meterReading', 'meterId', 'Meter Readings', { sort: '-readingDate' })] }, { key: 'history', label: 'History' }] },
   alternateSupply: { tabs: [{ key: 'details', label: 'Details' }, { key: 'meters', label: 'Meters', related: [rel('meter', 'alternateSupplyId', 'Alternate Supply Meters')] }, { key: 'history', label: 'History' }] },
   sampleLocation: { tabs: [{ key: 'details', label: 'Details' }, { key: 'samples', label: 'Samples', related: [rel('sample', 'sampleLocationId', 'Samples', { sort: '-collectedAt' })] }, { key: 'history', label: 'History' }], files: true },
   samplingEvent: {
-    tabs: [{ key: 'details', label: 'Details' }, { key: 'samples', label: 'Samples & Results', component: 'SamplingResults' }, { key: 'cases', label: 'Cases', related: [rel('case', 'samplingEventId', 'Non-Compliance Cases')] }, { key: 'history', label: 'History' }],
+    tabs: [
+      { key: 'details', label: 'Details' }, { key: 'samples', label: 'Sample Location Events', component: 'SamplingResults' },
+      { key: 'meters', label: 'Sampling Meters', related: [rel('eventMeter', 'samplingEventId', 'Sampling Event Meters')] },
+      { key: 'cases', label: 'Cases', related: [rel('case', 'samplingEventId', 'Non-Compliance Cases')] }, { key: 'history', label: 'History' }
+    ],
     actions: ['limsResults', 'massLoad'], files: true
+  },
+  sampleLocationEvent: { tabs: [{ key: 'details', label: 'Details' }, { key: 'samples', label: 'Samples', related: [rel('sample', 'sampleLocationEventId', 'Samples')] }, { key: 'history', label: 'History' }] },
+  eventMeter: { tabs: [{ key: 'details', label: 'Details' }, { key: 'history', label: 'History' }] },
+  workInstruction: { tabs: [{ key: 'details', label: 'Details' }, { key: 'history', label: 'History' }], files: true
   },
   sample: { tabs: [{ key: 'details', label: 'Details' }, { key: 'results', label: 'Results', related: [rel('sampleResult', 'sampleId', 'Sample Parameters')] }, { key: 'history', label: 'History' }] },
   case: { tabs: [{ key: 'details', label: 'Details' }, { key: 'related', label: 'Related', related: [rel('case', 'parentCaseId', 'Related Cases'), rel('task', 'relatedTo.id', 'Tasks', { poly: true })] }, { key: 'history', label: 'History' }], activity: true, files: true, notes: true },

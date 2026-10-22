@@ -27,7 +27,7 @@ export function formatValue(field, v, names = {}) {
 }
 
 export const STATUS_TONE = {
-  Active: 'success', Current: 'success', Completed: 'success', Closed: 'info', Approved: 'success', 'Results Received': 'success', Received: 'success', 'Queued for Billing': 'success', Compliant: 'success',
+  Active: 'success', Current: 'success', Completed: 'success', Closed: 'info', Approved: 'success', Received: 'success', 'Awaiting Response': 'warning', 'Queued for Billing': 'success', Compliant: 'success',
   'In Progress': 'primary', Running: 'primary', 'Sample Collected': 'primary', 'Pending Endorsement': 'warning', Pending: 'warning', 'Waiting on someone else': 'warning', 'Awaiting Information': 'warning',
   Scheduled: 'info', New: 'primary', 'Not Started': 'info', Draft: 'info', 'In Plan Assessment': 'warning',
   Suspended: 'warning', Cancelled: 'danger', Rejected: 'danger', Decommissioned: 'info', Inactive: 'info', Ended: 'danger', 'Moved Out': 'info',

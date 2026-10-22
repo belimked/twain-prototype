@@ -19,7 +19,8 @@ Demo users (password `twain123`): `coordinator`, `coordinator2` (Trade Waste Coo
 
 - `shared/objects.js` – object metadata (fields, picklists, layouts sections, list columns). Server and client both use it.
 - All business records live in one `records` table (JSON `data` plus indexed `parent_id`, `approval_id`, `owner_id`, `status`); every change writes field history.
-- `server/logic.js` – derived fields and business actions: enrolment for billing, meter consumption, 24h discharge, exceedances, LIMS simulation, mass load, billing run (batches of 5 approvals per request), approval work items (a Coordinator cannot decide their own item).
+- `server/logic.js` – derived fields and business actions: enrolment for billing, meter consumption, 24h discharge (sum of the Sampling Event Meters), exceedances (upper limit + NC tolerance, lower limit), LIMS simulation (history written as `Urbanflow Integration`), mass load, billing run (batches of 5 approvals per request), approval work items (a Coordinator cannot decide their own item).
+- Sampling follows TWAIN's hierarchy: Sampling Event → Sample Location Event (exclusion from billing) → Sample → Sample Result.
 - `server/seed.js` – demo data generated from a WasteID snapshot (`server/seed/wasteid.json`), loaded in chunks to stay inside Worker limits.
 - `src/layouts.js` – record page tabs, related lists and actions per object.
 
@@ -31,7 +32,7 @@ Set `WASTEID_API_URL` and `WASTEID_API_KEY`; the WasteID deployment needs the sa
 
 ## Deployment
 
-Repo https://github.com/belimked/twain-prototype. Pushing `main` runs GitHub Actions (`.github/workflows/deploy.yml`): build → D1 `twain` migrations → deploy to Pages `twain-prototype` (https://twain.saulxj.ggff.net). Actions secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. UAT is the `uat` branch (worktree `../twain-prototype-uat`, Pages project `twain-uat`, D1 `twain-uat`), deployed manually:
+Repo https://github.com/belimked/twain-prototype. Pushing `main` runs GitHub Actions (`.github/workflows/deploy.yml`): build → D1 `twain` migrations → deploy to Pages `twain-prototype` (https://twain.saulxj.ggff.net). Actions secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. UAT is the `uat` branch (worktree `../twain-prototype-uat`, Pages project `twain-uat`, D1 `twain-uat`); pushing `uat` runs the same workflow against the UAT project and database (https://twain-uat.saulxj.ggff.net). Manual alternative:
 
 ```bash
 npm run build && npx wrangler d1 migrations apply twain-uat --remote && npx wrangler pages deploy dist --project-name twain-uat --branch main
