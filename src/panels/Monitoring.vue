@@ -6,6 +6,7 @@
       <template #actions><el-button size="small" :loading="busy" @click="setDefaults">Set Up Default Sample Parameters</el-button></template>
     </RelatedList>
     <RelatedList object="samplingEvent" field="approvalId" title="Sampling Events" :parent="record" sort="-scheduledDate" :limit="10" />
+    <RelatedList object="workInstruction" field="approvalId" title="Sampling Work Instructions" :parent="record" />
     <RelatedList object="inspection" field="approvalId" title="Inspections" :parent="record" sort="-scheduledDate" />
   </div>
 </template>

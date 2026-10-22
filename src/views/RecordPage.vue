@@ -126,10 +126,11 @@ const ACTIONS = {
   cancelApproval: { label: 'Cancel Approval', show: (r) => r.status !== 'Cancelled' },
   changeFrequencies: { label: 'Update Inspection Frequencies', show: (r) => r.status === 'Active' },
   setDefaultParameters: { label: 'Set Default Sample Parameters' },
+  addCondition: { label: 'Add Conditions' },
   newNonCompliance: { label: 'New Non-Compliance Case', primary: true },
   newTask: { label: 'New Task' },
   limsResults: { label: 'Simulate LIMS Results', primary: true, show: (r) => r.status === 'Sample Collected' },
-  massLoad: { label: 'Calculate Mass Load', primary: true, show: (r) => r.status === 'Results Received' && !r.massLoadCalculated },
+  massLoad: { label: 'Calculate Mass Load', primary: true, show: (r) => r.status === 'Received' && !r.massLoadCalculated },
   completeTask: { label: 'Mark Complete', primary: true, show: (r) => r.status !== 'Completed' },
   followUp: { label: 'Create Follow-Up Task' },
   endorseInvoice: { label: 'Send for Endorsement', primary: true, show: (r) => r.status === 'Draft' }
@@ -215,9 +216,12 @@ async function act(key) {
     if (key === 'newNonCompliance') {
       const d = { caseType: 'Non-Compliance', status: 'New', reportedBy: 'UU Internal', incidentDate: new Date().toISOString().slice(0, 10) }
       if (object.value === 'approval') Object.assign(d, { approvalId: r.id, subject: `Non-compliance – ${r.tradingName}` })
-      if (object.value === 'pts') Object.assign(d, { approvalId: r.approvalId, ptsId: r.id, occupierId: r.occupierId, subject: `Pre-treatment non-compliance – ${r.name}`, nonComplianceType: 'Pre-treatment not maintained' })
+      if (object.value === 'pts') Object.assign(d, { approvalId: r.approvalId, ptsId: r.id, occupierId: r.occupierId, subject: `Pre-treatment non-compliance – ${r.name}`, nonComplianceType: 'Pre-treatment Not Maintained' })
       if (object.value === 'inspection') Object.assign(d, { approvalId: r.approvalId, inspectionId: r.id, ptsId: r.ptsId, subject: `Inspection non-compliance – ${r.name}`, nonComplianceType: r.nonComplianceItems?.[0] || null, description: r.observations })
       openForm({ object: 'case', defaults: d, names: { ...names.value, [r.id]: { name: r.name, label: title.value, object: r.object } } })
+    }
+    if (key === 'addCondition') {
+      openForm({ object: 'approvalCondition', defaults: { approvalId: r.id }, names: { ...names.value, [r.id]: { name: r.name, label: title.value, object: r.object } }, title: `Add a Condition – ${r.name}`, onSaved: () => { tab.value = 'related'; reload(); changed() } })
     }
     if (key === 'newTask' || key === 'followUp') {
       const rel = key === 'followUp' ? r.relatedTo : { object: r.object, id: r.id }

@@ -17,12 +17,16 @@ export async function billingConfig(db) {
   return { ...DEFAULT_BILLING_CONFIG, ...(row?.value || {}) }
 }
 
-async function limitFor(store, approvalId, parameterId) {
+async function limitsFor(store, approvalId, parameterId) {
   const params = await store.list('sampleParameter', { approvalId, parameterId })
   const sp = params[0]
-  if (sp) return sp.variation && has(sp.variationLimit) ? sp.variationLimit : sp.limit
-  return (await store.get(parameterId))?.defaultLimit ?? null
+  if (sp) return { limit: sp.variation && has(sp.variationLimit) ? sp.variationLimit : sp.limit, lowerLimit: sp.lowerLimit ?? null, ncTolerance: sp.ncTolerance ?? 0 }
+  return { limit: (await store.get(parameterId))?.defaultLimit ?? null, lowerLimit: null, ncTolerance: 0 }
 }
+// Exceeded when above the upper concentration plus the NC tolerance, or below the lower concentration.
+export const isExceeded = (value, { limit, lowerLimit, ncTolerance }) =>
+  (has(limit) && value > limit * (1 + (ncTolerance || 0) / 100)) || (has(lowerLimit) && value < lowerLimit)
+const INTEGRATION = 'Urbanflow Integration'
 
 export const hooks = {
   async beforeSave(store, def, d, before, { system } = {}) {
@@ -67,17 +71,38 @@ export const hooks = {
         break
       }
       case 'samplingEvent':
-        d.volumeKl = has(d.meterStart) && has(d.meterEnd) ? round(d.meterEnd - d.meterStart) : null
-        if (d.volumeKl !== null && d.volumeKl < 0) throw bad('24h meter end must not be lower than the start reading')
         if (d.status === 'Sample Collected' && before?.status !== 'Sample Collected') {
           if (!d.limsId) d.limsId = 'LIMS-' + String(Math.floor(Math.random() * 9e6) + 1e6)
           if (!d.sampleDate) d.sampleDate = today()
         }
-        if (d.status === 'Results Received' && before?.status !== 'Results Received' && !system) throw bad('Results arrive from the laboratory (use "Simulate LIMS results")')
+        if (d.status === 'Received' && before?.status !== 'Received' && !system) throw bad('Results arrive from the laboratory (use "Simulate LIMS results")')
         break
-      case 'sample': {
+      case 'sampleLocationEvent': {
         const ev = await get(d.samplingEventId)
         d.approvalId = ev?.approvalId ?? null
+        const loc = await get(d.sampleLocationId)
+        if (loc && loc.approvalId !== d.approvalId) throw bad('The sample location must belong to the same approval as the sampling event')
+        const dup = (await store.list('sampleLocationEvent', { samplingEventId: d.samplingEventId, sampleLocationId: d.sampleLocationId })).find((x) => x.id !== before?.id)
+        if (dup) throw bad(`${dup.name} already covers this sample location for the event`)
+        if (!d.excludedFromBilling) d.exclusionReason = null
+        break
+      }
+      case 'eventMeter': {
+        const ev = await get(d.samplingEventId)
+        d.approvalId = ev?.approvalId ?? null
+        if (d.meterId) {
+          const m = await get(d.meterId)
+          if (m && !has(d.serialNo)) d.serialNo = m.serialNo ?? null
+        }
+        d.volumeKl = has(d.startReading) && has(d.endReading) ? round(d.endReading - d.startReading, 3) : null
+        if (d.volumeKl !== null && d.volumeKl < 0) throw bad('The end meter reading must not be lower than the start reading')
+        break
+      }
+      case 'sample': {
+        const sle = await get(d.sampleLocationEventId)
+        d.samplingEventId = sle?.samplingEventId ?? null
+        d.sampleLocationId = sle?.sampleLocationId ?? null
+        d.approvalId = sle?.approvalId ?? null
         break
       }
       case 'sampleResult': {
@@ -87,8 +112,8 @@ export const hooks = {
         const p = await get(d.parameterId)
         d.parameterName = p?.paramName ?? null
         d.unit = p?.unit ?? null
-        d.limit = await limitFor(store, d.approvalId, d.parameterId)
-        d.exceeded = has(d.limit) && d.value > d.limit
+        Object.assign(d, await limitsFor(store, d.approvalId, d.parameterId))
+        d.exceeded = isExceeded(d.value, d)
         break
       }
       case 'case':
@@ -129,16 +154,33 @@ export const hooks = {
     if (def.key === 'samplingEvent' && rec.status === 'Sample Collected' && before?.status !== 'Sample Collected') {
       await ensureSamples(store, rec)
     }
+    if (def.key === 'eventMeter') await refreshEventVolume(store, rec.samplingEventId)
+  },
+
+  async afterRemove(store, def, rec) {
+    if (def.key === 'eventMeter') await refreshEventVolume(store, rec.samplingEventId)
   }
 }
 
+// The event's 24h discharge is the sum of its Sampling Event Meters.
+async function refreshEventVolume(store, eventId) {
+  const meters = await store.list('eventMeter', { samplingEventId: eventId })
+  const vols = meters.map((m) => m.volumeKl).filter(has)
+  await store.update(eventId, { volumeKl: vols.length ? round(vols.reduce((x, v) => x + v, 0), 3) : null }, { system: true })
+}
+
+// Sample Location Events for the default locations, each with one sample of the location's default method.
 async function ensureSamples(store, event) {
   const existing = await store.list('sample', { samplingEventId: event.id })
   if (existing.length) return existing
-  const locations = (await store.list('sampleLocation', { approvalId: event.approvalId })).filter((l) => l.isDefault && l.status === 'Active')
+  const sles = await store.list('sampleLocationEvent', { samplingEventId: event.id })
+  const covered = new Set(sles.map((x) => x.sampleLocationId))
+  const locations = (await store.list('sampleLocation', { approvalId: event.approvalId })).filter((l) => l.isDefault && l.status === 'Active' && !covered.has(l.id))
+  for (const l of locations) sles.push(await store.create('sampleLocationEvent', { samplingEventId: event.id, sampleLocationId: l.id }))
   const out = []
-  for (const l of locations) {
-    out.push(await store.create('sample', { samplingEventId: event.id, sampleLocationId: l.id, method: l.method, collectedAt: nowIso(), status: 'Pending' }))
+  for (const sle of sles) {
+    const l = await store.get(sle.sampleLocationId)
+    out.push(await store.create('sample', { sampleLocationEventId: sle.id, method: l?.method || 'Composite', sampleType: 'Aqueous', collectedAt: nowIso(), status: 'Pending' }))
   }
   return out
 }
@@ -166,12 +208,12 @@ export const actions = {
       const done = new Set((await store.list('sampleResult', { sampleId: sample.id })).map((r) => r.parameterId))
       for (const p of params) {
         if (done.has(p.parameterId)) continue
-        const r = await store.create('sampleResult', { sampleId: sample.id, parameterId: p.parameterId, value: fakeValue(sample.id + p.parameterId, p.variation ? p.variationLimit : p.limit) })
+        const r = await store.create('sampleResult', { sampleId: sample.id, parameterId: p.parameterId, value: fakeValue(sample.id + p.parameterId, p.variation ? p.variationLimit : p.limit), resultSource: 'SAS (Integration)' }, { system: true, actor: INTEGRATION })
         if (r.exceeded) exceeded.push(r)
       }
-      await store.update(sample.id, { status: 'Received', limsSampleId: sample.limsSampleId || `${event.limsId}-${sample.name.slice(-3)}` }, { system: true })
+      await store.update(sample.id, { status: 'Received', limsSampleId: sample.limsSampleId || `${event.limsId}-${sample.name.slice(-3)}` }, { system: true, actor: INTEGRATION })
     }
-    await store.update(event.id, { status: 'Results Received' }, { system: true })
+    await store.update(event.id, { status: 'Received' }, { system: true, actor: INTEGRATION })
     let nc = null
     if (exceeded.length) nc = await raiseExceedanceCase(store, event, exceeded)
     return { results: params.length * samples.length, exceeded: exceeded.length, caseId: nc?.id ?? null, caseName: nc?.name ?? null }
@@ -179,15 +221,22 @@ export const actions = {
 
   async massLoad(store, { eventId }) {
     const event = await store.must(eventId, 'samplingEvent')
-    if (event.status !== 'Results Received') throw bad('Mass load needs laboratory results first')
-    if (!has(event.volumeKl)) throw bad('Enter the 24h meter start and end readings first')
+    if (event.status !== 'Received') throw bad('Mass load needs laboratory results first')
+    const meters = await store.list('eventMeter', { samplingEventId: event.id })
+    if (!has(event.volumeKl)) throw bad('Add a Sampling Event Meter with the 24h start and end readings first')
     const samples = (await store.list('sample', { samplingEventId: event.id })).filter((x) => x.method === 'Composite')
     if (!samples.length) throw bad('Mass load applies to composite samples; this event has none')
+    // Volume for a sample: the meter at its sample location when there is one, else the event total.
+    const volumeFor = (sample) => {
+      const own = meters.filter((m) => m.sampleLocationId === sample.sampleLocationId && has(m.volumeKl))
+      return own.length ? own.reduce((x, m) => x + m.volumeKl, 0) : event.volumeKl
+    }
     let n = 0
     for (const sample of samples) {
+      const vol = volumeFor(sample)
       for (const r of await store.list('sampleResult', { sampleId: sample.id })) {
         if (r.unit !== 'mg/L') continue
-        await store.update(r.id, { massLoadKg: round((r.value * event.volumeKl) / 1000, 3) }, { system: true })
+        await store.update(r.id, { massLoadKg: round((r.value * vol) / 1000, 3) }, { system: true })
         n++
       }
     }
@@ -291,8 +340,8 @@ async function raiseExceedanceCase(store, event, exceeded) {
   const approval = await store.get(event.approvalId)
   const lines = exceeded.map((r) => `${r.parameterName}: ${r.value} ${r.unit} (limit ${r.limit})`).join('\n')
   return store.create('case', {
-    caseType: 'Non-Compliance', subject: `Exceedance – ${event.name} – ${approval?.tradingName ?? ''}`.trim(), status: 'New', priority: 'High',
-    approvalId: event.approvalId, samplingEventId: event.id, nonComplianceType: 'Exceeded acceptance criteria', reportedBy: 'Laboratory',
+    caseType: 'Non-Compliance', subject: `Quality Violation – ${event.name} – ${approval?.tradingName ?? ''}`.trim(), status: 'New', priority: 'High',
+    approvalId: event.approvalId, samplingEventId: event.id, nonComplianceType: 'Quality Violation', reportedBy: 'Laboratory',
     incidentDate: event.sampleDate, description: `Laboratory results exceeded the acceptance criteria:\n${lines}`, ownerId: approval?.ownerId ?? null
   })
 }
@@ -312,9 +361,9 @@ async function billApproval(store, run, a, cfg, params) {
     a.billingAccountId ? store.get(a.billingAccountId) : null
   ])
   const of = (o) => rows.filter((r) => r.object === o).map(toRecord)
-  const [meters, readings, samples, results, locations, events] = ['meter', 'meterReading', 'sample', 'sampleResult', 'sampleLocation', 'samplingEvent'].map(of)
+  const [meters, readings, samples, results, locations, events, sles] = ['meter', 'meterReading', 'sample', 'sampleResult', 'sampleLocation', 'samplingEvent', 'sampleLocationEvent'].map(of)
   const billingMeters = meters.filter((m) => m.usedForBilling && !m.alternateSupplyId)
-  const discharge = billingMeters.filter((m) => m.kind === 'Discharge')
+  const discharge = billingMeters.filter((m) => m.kind === 'TW Effluent')
   const useMeters = new Set((discharge.length ? discharge : billingMeters).map((m) => m.id))
   const inflowKl = round(readings.filter((r) => useMeters.has(r.meterId) && r.readingDate >= periodStart && r.readingDate <= periodEnd).reduce((x, r) => x + (r.consumption || 0), 0))
   const dischargeFactor = discharge.length ? 1 : account?.sewageDischargeFactor ?? 0.95
@@ -324,9 +373,10 @@ async function billApproval(store, run, a, cfg, params) {
 
   const billingLocations = new Set(locations.filter((l) => l.usedForBilling).map((l) => l.id))
   const eventById = Object.fromEntries(events.map((e) => [e.id, e]))
+  const excludedSle = new Set(sles.filter((x) => x.excludedFromBilling).map((x) => x.id))
   const usable = new Set(samples.filter((x) => {
     const ev = eventById[x.samplingEventId]
-    return !x.excludeFromBilling && x.status === 'Received' && billingLocations.has(x.sampleLocationId) && ev?.sampleDate >= periodStart && ev?.sampleDate <= periodEnd &&
+    return !excludedSle.has(x.sampleLocationEventId) && x.status === 'Received' && billingLocations.has(x.sampleLocationId) && ev?.sampleDate >= periodStart && ev?.sampleDate <= periodEnd &&
       (x.method !== 'Composite' || ev.massLoadCalculated)
   }).map((x) => x.id))
   const codeOf = Object.fromEntries(params.map((p) => [p.id, p.code]))
@@ -349,11 +399,11 @@ async function billApproval(store, run, a, cfg, params) {
   const amount = round(breakdown.reduce((x, b) => x + b.charge, 0))
   const sampleCount = deemed ? 0 : usable.size
   const calcId = uid(), invId = uid()
+  const gst = round(amount * DEFAULT_BILLING_CONFIG.gstRate)
   const calc = await store.prepareCreate('billingCalc', {
     billingRunId: run.id, approvalId: a.id, invoiceId: invId, periodStart, periodEnd, inflowKl, dischargeFactor, domesticOffsetKl, tradeWasteKl, deemed,
-    ...conc, sampleCount, amount, breakdown: { lines: breakdown, note: noSamples && !a.isDeemedQuality ? 'No usable samples in the period; deemed quality applied' : null }
+    ...conc, sampleCount, amount, gst, total: round(amount + gst), breakdown: { lines: breakdown, note: noSamples && !a.isDeemedQuality ? 'No usable samples in the period; deemed quality applied' : null }
   }, calcId)
-  const gst = round(amount * DEFAULT_BILLING_CONFIG.gstRate)
   const inv = await store.prepareCreate('invoice', { approvalId: a.id, billingRunId: run.id, billingCalcId: calcId, invoiceType: 'Trade Waste Quality', status: 'Draft', periodStart, periodEnd, amount, gst, total: round(amount + gst) }, invId)
   // All writes for one approval commit together, so a retried batch never bills an approval twice.
   await store.db.batch([...calc, ...inv, ...store.prepareSystemPatch(a, { lastBillingDate: periodEnd, nextBillingDate: addMonths(a.nextBillingDate, 3) })])

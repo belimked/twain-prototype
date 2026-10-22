@@ -37,6 +37,8 @@ const lookupFilter = computed(() => {
   if (props.field.key === 'ptsId' && r.occupierId) return { 'f.occupierId': r.occupierId }
   if (props.field.key === 'ptsId' && r.approvalId) return { approvalId: r.approvalId }
   if (props.field.key === 'samplingEventId' && r.approvalId) return { approvalId: r.approvalId }
+  if (props.field.key === 'sampleLocationEventId' && r.samplingEventId) return { parentId: r.samplingEventId }
+  if (props.field.key === 'meterId' && r.approvalId) return { approvalId: r.approvalId }
   if (props.field.key === 'inspectionId' && r.approvalId) return { approvalId: r.approvalId }
   if (props.field.key === 'parameterId') return { 'f.status': 'Active' }
   return null
