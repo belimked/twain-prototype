@@ -32,7 +32,7 @@ Set `WASTEID_API_URL` and `WASTEID_API_KEY`; the WasteID deployment needs the sa
 
 ## Deployment
 
-Repo https://github.com/belimked/twain-prototype. Pushing `main` runs GitHub Actions (`.github/workflows/deploy.yml`): build → D1 `twain` migrations → deploy to Pages `twain-prototype` (https://twain.saulxj.ggff.net). Actions secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. UAT is the `uat` branch (worktree `../twain-prototype-uat`, Pages project `twain-uat`, D1 `twain-uat`), deployed manually:
+Repo https://github.com/belimked/twain-prototype. Pushing `main` runs GitHub Actions (`.github/workflows/deploy.yml`): build → D1 `twain` migrations → deploy to Pages `twain-prototype` (https://twain.saulxj.ggff.net). Actions secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. UAT is the `uat` branch (worktree `../twain-prototype-uat`, Pages project `twain-uat`, D1 `twain-uat`); pushing `uat` runs the same workflow against the UAT project and database (https://twain-uat.saulxj.ggff.net). Manual alternative:
 
 ```bash
 npm run build && npx wrangler d1 migrations apply twain-uat --remote && npx wrangler pages deploy dist --project-name twain-uat --branch main

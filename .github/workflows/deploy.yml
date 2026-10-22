@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, uat]
   pull_request:
   workflow_dispatch:
 
@@ -27,8 +27,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # main → Pages project twain-prototype + D1 twain; uat → twain-uat + D1 twain-uat (the uat branch carries its own wrangler.toml)
       - name: Apply D1 migrations
-        if: github.ref == 'refs/heads/main'
-        run: npx wrangler d1 migrations apply twain --remote
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat'
+        run: npx wrangler d1 migrations apply "${{ github.ref == 'refs/heads/uat' && 'twain-uat' || 'twain' }}" --remote
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler pages deploy dist --project-name twain-prototype --branch "${{ github.head_ref || github.ref_name }}"
+        run: npx wrangler pages deploy dist --project-name "${{ github.ref == 'refs/heads/uat' && 'twain-uat' || 'twain-prototype' }}" --branch "${{ github.ref == 'refs/heads/uat' && 'main' || (github.head_ref || github.ref_name) }}"
