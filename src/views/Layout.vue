@@ -1,7 +1,7 @@
 <template>
   <div class="shell">
     <header class="topbar">
-      <div class="row brand" @click="router.push('/home')"><img src="/favicon.svg" alt="" width="30" height="30" /><span class="app">TWAIN</span></div>
+      <div class="row brand" @click="router.push('/home')"><img src="/favicon.svg" alt="" width="30" height="30" /><span class="app">Salesforce</span></div>
       <GlobalSearch class="grow search" />
       <div class="row right">
         <el-dropdown trigger="click" @command="globalAction">
@@ -68,7 +68,7 @@
       <router-view v-if="ready" :key="route.path" />
       <div v-else class="seeding">
         <div class="card seed-card">
-          <h3>Preparing TWAIN demo data…</h3>
+          <h3>Preparing Salesforce demo data…</h3>
           <p class="muted small">Migrating WasteID locations and devices into approvals, sites, occupiers and pre-treatment systems.</p>
           <el-progress :percentage="seedPct" />
         </div>
@@ -143,7 +143,7 @@ async function userMenu(cmd) {
   if (cmd === 'logout') { signOut(); router.replace('/login') }
   if (cmd === 'setup') router.push('/setup')
   if (cmd === 'reset') {
-    await ElMessageBox.confirm('Replace all TWAIN records with fresh demo data? Changes made by everyone will be lost.', 'Reset demo data', { type: 'warning', confirmButtonText: 'Reset' })
+    await ElMessageBox.confirm('Replace all Salesforce records with fresh demo data? Changes made by everyone will be lost.', 'Reset demo data', { type: 'warning', confirmButtonText: 'Reset' })
     ready.value = false
     seedPct.value = 0
     await seed()
