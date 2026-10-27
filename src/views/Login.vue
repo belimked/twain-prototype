@@ -1,7 +1,7 @@
 <template>
   <div class="login">
     <div class="panel card">
-      <div class="brand row"><img src="/favicon.svg" alt="" width="40" height="40" /><div><div class="name">TWAIN</div><div class="muted small">Trade Waste Access Information Network</div></div></div>
+      <div class="brand row"><img src="/favicon.svg" alt="" width="40" height="40" /><div><div class="name">Salesforce</div><div class="muted small">Trade Waste Management</div></div></div>
       <el-form @submit.prevent="submit">
         <el-form-item><el-input v-model="username" placeholder="Username" size="large" autocomplete="username" prefix-icon="User" /></el-form-item>
         <el-form-item><el-input v-model="password" type="password" placeholder="Password" size="large" show-password autocomplete="current-password" prefix-icon="Lock" /></el-form-item>

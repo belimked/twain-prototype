@@ -13,7 +13,7 @@ onMounted(async () => {
   const psid = String(route.params.psid)
   const { records } = await listRecords('pts', { 'f.psid': psid })
   if (records[0]) return openRecord('pts', records[0].id, records[0].name)
-  message.value = `No pre-treatment system with PSID ${psid} in TWAIN.`
+  message.value = `No pre-treatment system with PSID ${psid} in Salesforce.`
   setTimeout(() => router.replace({ path: '/o/pts' }), 2500)
 })
 </script>
